@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tic Tac Toe | AI Playground</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#10151f;color:#edf2fa}
+*{box-sizing:border-box}body{margin:0;padding:32px 20px;min-height:100vh;background:radial-gradient(ellipse at top,#25354b,#10151f 70%)}
+main{max-width:1100px;margin:auto}h1{font-size:clamp(2rem,6vw,3.5rem);letter-spacing:-.05em;margin:8px 0}h2{font-size:1.2rem}
+.muted,small{color:#aab8cc}.eyebrow{letter-spacing:.18em;text-transform:uppercase;color:#6fe2dc;font-size:.75rem}
+.layout{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:24px}.panel{padding:24px;background:#192333;border:1px solid #334158;border-radius:20px}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:14px}label{display:grid;gap:7px;color:#b8c7dc;font-size:.85rem}
+select,input,button{font:inherit;border-radius:9px;border:1px solid #42516a;padding:11px;background:#243249;color:#edf2fa;min-width:0}
+button{cursor:pointer}button:hover:enabled{background:#344763}button:disabled,select:disabled,input:disabled{opacity:.5;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #f5df96;outline-offset:3px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.primary{background:#6fe2dc;color:#102728;font-weight:650}
+#status{min-height:26px;font-weight:600}.board,.matrix{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.cell{aspect-ratio:1;font-size:clamp(2.5rem,9vw,4rem);font-weight:700;border-radius:14px}.cell:disabled{opacity:1}
+.x{color:#6fe2dc}.o{color:#ffb97b}.winner,.selected{background:#25463f;border-color:#6fe2dc!important}
+.score{display:grid;place-content:center;text-align:center;min-height:76px;background:#243249;border:1px solid #35455e;border-radius:12px}
+.score strong{font-size:1.6rem}.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:20px 0}
+.stat{padding:12px;background:#101b2b;border-radius:10px}.stat strong{display:block;font-size:1.3rem;margin-top:5px}
+.benchmark{margin-top:24px}progress{width:100%;height:12px;accent-color:#6fe2dc;margin-top:20px}
+#error{color:#ffc4bc;min-height:24px}.note{font-size:.85rem;line-height:1.5}
+@media(max-width:760px){.layout{grid-template-columns:1fr}.panel{padding:18px}}
+</style>
+</head><body><main>
+<p class="eyebrow">Adversarial search playground</p><h1>Tic Tac Toe</h1>
+<p class="muted">Play, inspect a decision, and put the agents to the test.</p><p id="error" role="alert"></p>
+<div class="layout"><section class="panel" aria-label="Game"><div class="controls">
+<label>Game mode<select id="mode"><option value="human">Human vs AI</option><option value="local">2-Player Local</option><option value="ai">AI vs AI</option></select></label>
+<label>Your mark<select id="human"><option>X</option><option>O</option></select></label>
+{% for mark in ['x','o'] %}<label>{{ mark|upper }} agent<select id="{{ mark }}-agent"><option value="random">Easy - Random</option><option value="heuristic">Medium - Heuristic</option><option value="minimax" selected>Unbeatable - Minimax</option></select></label>{% endfor %}
+</div><div class="actions"><button id="new" class="primary">New game</button><button id="auto" hidden disabled>Auto-play AI</button></div>
+<p class="note muted">Changing your mark starts a new Human vs AI game. Other settings apply on New game. X starts, so the AI opens when you choose O. In AI vs AI, use Auto-play AI to start or pause the match.</p>
+<p id="status" role="status" aria-live="polite">Loading game...</p>
+<div class="board" role="group" aria-label="Tic Tac Toe board">{% for pos in range(9) %}<button class="cell" data-pos="{{ pos }}" disabled aria-label="Square {{ pos + 1 }}"></button>{% endfor %}</div>
+</section><section class="panel" aria-label="Decision visualizer"><h2>Inside the last AI decision</h2>
+<p id="decision" class="muted">Play an AI turn to see candidate scores.</p>
+<div class="matrix" aria-label="Candidate move scores">{% for pos in range(9) %}<div class="score"><small>Square {{ pos + 1 }}</small><strong>-</strong></div>{% endfor %}</div>
+<div class="stats"><div class="stat"><small>Nodes visited</small><strong id="nodes">0</strong></div><div class="stat"><small>Cutoffs</small><strong id="cutoffs">0</strong></div><div class="stat"><small>Time (ms)</small><strong id="time">0</strong></div></div>
+<p id="legend" class="note muted">Scores refer to the board before the last AI move. Selected square highlighted.</p></section></div>
+<section class="panel benchmark"><h2>Agent benchmark</h2><div class="controls">
+<label>X agent<select id="bench-x"><option value="minimax">Minimax</option><option value="heuristic">Heuristic</option><option value="random">Random</option></select></label>
+<label>O agent<select id="bench-o"><option value="random">Random</option><option value="heuristic">Heuristic</option><option value="minimax">Minimax</option></select></label>
+<label>Games<input id="games" type="number" min="1" max="500" value="50" required></label></div>
+<div class="actions"><button id="benchmark" class="primary">Run benchmark</button><button id="stop" disabled>Stop benchmark</button></div>
+<progress id="progress" max="50" value="0" aria-label="Benchmark progress"></progress>
+<p id="bench-status" role="status" aria-live="polite">Ready. X plays first in every match.</p>
+<div class="stats"><div class="stat"><small>X wins</small><strong id="x-wins">0</strong></div><div class="stat"><small>Draws</small><strong id="draws">0</strong></div><div class="stat"><small>O wins</small><strong id="o-wins">0</strong></div></div></section>
+</main><script>
+const $ = id => document.getElementById(id);
+const cells = [...document.querySelectorAll('.cell')], scores = [...document.querySelectorAll('.score')];
+let state, busy = false, auto = false, timer, stream;
+function updateModeInputs() {
+  const mode = $('mode').value;
+  const human = $('human').value;
+  $('mode').disabled = busy;
+  $('human').disabled = busy || mode !== 'human';
+  $('x-agent').disabled = busy || mode === 'local' || (mode === 'human' && human === 'X');
+  $('o-agent').disabled = busy || mode === 'local' || (mode === 'human' && human === 'O');
+  $('auto').hidden = mode !== 'ai';
+  $('auto').disabled = busy || state?.mode !== 'ai' || !state?.ai_turn;
+}
+$('mode').addEventListener('change', updateModeInputs);
+$('human').addEventListener('change', () => {
+  updateModeInputs();
+  if ($('mode').value === 'human') startNewGame();
+});
+updateModeInputs();
+// Render server state and send actions only; rules and scoring stay in Python.
+function render() {
+  if (!state) return;
+  $('status').textContent = state.status;
+  cells.forEach((cell,pos) => {
+    const mark = state.board[pos].trim();
+    cell.textContent = mark;
+    cell.className = 'cell ' + mark.toLowerCase() + ((state.winning_line || []).includes(pos) ? ' winner' : '');
+    cell.disabled = busy || !state.can_play || !state.legal_moves.includes(pos);
+    cell.setAttribute('aria-label','Row ' + (Math.floor(pos/3)+1) + ', column ' + (pos%3+1) + ', ' + (mark || 'empty'));
+  });
+  $('new').disabled = busy;
+  updateModeInputs();
+  $('auto').textContent = auto ? 'Pause auto-play' : 'Auto-play AI';
+  const d = state.decision;
+  $('decision').textContent = d ? d.player + ' - ' + d.kind + ' chose square ' + (d.selected_move+1) : 'Play an AI turn to see candidate scores.';
+  scores.forEach((cell,pos) => {
+    cell.querySelector('strong').textContent = d?.candidate_scores[pos] ?? '-';
+    cell.classList.toggle('selected',d?.selected_move === pos);
+  });
+  const showNodes = d?.kind === 'minimax';
+  $('nodes').textContent = showNodes ? d.nodes_visited : '—';
+  $('nodes').closest('.stat').classList.toggle('muted', !showNodes);
+  $('cutoffs').textContent = d?.cutoffs ?? 0;
+  $('time').textContent = d?.elapsed_ms ?? 0;
+  const legends = {minimax:'Minimax: positive = win, zero = draw, negative = loss. Depth rewards fast wins and delayed losses.',heuristic:'Priority ranks: 5 win, 4 block, 3 center, 2 corner, 1 edge.',random:'Scores show uniform selection probabilities.'};
+  $('legend').textContent = (d ? legends[d.kind] + ' ' : '') + 'Scores refer to the board before the last AI move; selected square highlighted.';
+}
+function schedule() {
+  clearTimeout(timer);
+  const automaticTurn = state?.mode === 'human' || (state?.mode === 'ai' && auto);
+  if (automaticTurn && state?.ai_turn && !busy) timer = setTimeout(() => act('/api/step'),550);
+  if (state?.game_over) {auto = false; render();}
+}
+async function act(url,body) {
+  if (busy) return;
+  let succeeded = false;
+  busy = true; render(); $('error').textContent = '';
+  try {
+    const response = await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body || {})});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'Request failed.');
+    state = data;
+    succeeded = true;
+  } catch (error) {$('error').textContent = error.message; auto = false;}
+  finally {busy = false; render(); if (succeeded) schedule();}
+}
+cells.forEach(cell => cell.onclick = () => act('/api/move',{pos:Number(cell.dataset.pos)}));
+function startNewGame() {
+  auto = false;
+  clearTimeout(timer);
+  return act('/api/new',{mode:$('mode').value,human:$('human').value,x_agent:$('x-agent').value,o_agent:$('o-agent').value});
+}
+$('new').onclick = startNewGame;
+$('auto').onclick = () => {auto = !auto; render(); schedule();};
+function stopBenchmark(message) {
+  stream?.close(); stream = null;
+  $('benchmark').disabled = false; $('stop').disabled = true;
+  if (message) $('bench-status').textContent = message;
+}
+$('stop').onclick = () => stopBenchmark('Stopped. Results reflect completed games.');
+$('benchmark').onclick = () => {
+  if (!$('games').reportValidity()) return;
+  stopBenchmark(); $('benchmark').disabled = true; $('stop').disabled = false;
+  $('progress').value = 0; $('progress').max = Number($('games').value);
+  for (const id of ['x-wins','o-wins','draws']) $(id).textContent = '0';
+  $('bench-status').textContent = 'Running...';
+  const params = new URLSearchParams({x:$('bench-x').value,o:$('bench-o').value,games:$('games').value});
+  stream = new EventSource('/api/simulate?' + params);
+  stream.onmessage = event => {
+    const r = JSON.parse(event.data);
+    $('progress').value = r.games_played;
+    $('x-wins').textContent = r.agent1_wins + ' (' + r.agent1_win_rate + '%)';
+    $('o-wins').textContent = r.agent2_wins + ' (' + r.agent2_win_rate + '%)';
+    $('draws').textContent = r.draws + ' (' + r.draw_rate + '%)';
+    $('bench-status').textContent = r.games_played + ' / ' + r.total + ' games completed';
+  };
+  stream.addEventListener('done',() => stopBenchmark('Benchmark complete.'));
+  stream.onerror = () => stopBenchmark('Benchmark connection interrupted. You can run it again.');
+};
+fetch('/api/state').then(async response => {
+  if (!response.ok) throw new Error('Unable to load game.');
+  state = await response.json();
+  $('mode').value = state.mode;
+  $('human').value = state.human;
+  $('x-agent').value = state.x_agent;
+  $('o-agent').value = state.o_agent;
+  updateModeInputs();
+  render();
+  schedule();
+}).catch(error => {$('error').textContent = error.message;});
+</script></body></html>

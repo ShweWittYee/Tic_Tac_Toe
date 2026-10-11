@@ -10,8 +10,8 @@
 ---
 
 ## Student Information
-- **Name:** [Write your Name here]
-- **MMDT ID:** [Write your MMDT ID here]
+- **Name:** Shwe Witt Yee
+- **MMDT ID:** MMDT030
 
 ---
 
@@ -31,12 +31,12 @@
 
 ## Section 3: Local Verification & Agent Checklist
 *Check the algorithms, agents, and features you successfully ran and verified on your local development server by placing an `x` in the brackets (e.g., `[x]`):*
-- [ ] Minimax Search Algorithm with Depth Penalty
-- [ ] Alpha-Beta Pruning Optimization
-- [ ] Rule-Based Heuristic Agent
-- [ ] Uniform Random Baseline Agent
-- [ ] Interactive Web Visualizer with Move Matrix & Metrics
-- [ ] Bot vs Bot Simulation Benchmark
+- [x] Minimax Search Algorithm with Depth Penalty
+- [x] Alpha-Beta Pruning Optimization
+- [x] Rule-Based Heuristic Agent
+- [x] Uniform Random Baseline Agent
+- [x] Interactive Web Visualizer with Move Matrix & Metrics
+- [x] Bot vs Bot Simulation Benchmark
 
 ---
 
